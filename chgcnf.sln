@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30907.101
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "chgcnf3", "chgcnf3.csproj", "{136518D3-A2F7-429A-9D31-7D9037A1F3D7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "chgcnf", "chgcnf.csproj", "{136518D3-A2F7-429A-9D31-7D9037A1F3D7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

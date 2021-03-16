@@ -5,18 +5,21 @@ using System.Linq;
 using System.Text;
 using EncryptorLibrary;
 
-namespace chgcnf3
+namespace chgcnf
 {
 	class Program
 	{
 		static int versionMajor = 3;
-		static int versionMinor = 1;
+		static int versionMinor = 2;
 		static int versionRevision = 0;
 		static string strFind = "";
 		static string strReplace = "";
 
-		static string undoFile = "chgcnf3_undo.bat";
-		static string logFileName = "chgcnf3.log";
+		static string uniqueFileName = "";	// Built on first run
+		static string undoFile = "";		// Built on first run
+		static string logFileName = "";     // Built on first run
+
+		static long foundCount = 0;
 
 		static bool fileContainsString(string filename, string strToFind)
 		{
@@ -51,29 +54,48 @@ namespace chgcnf3
 			Console.ForegroundColor = ConsoleColor.White;
 		}
 
-		/// <summary>
-		/// 
-		/// </summary>
-		/// <param name="name"></param>
-		/// <param name="error"></param>
-		/// <param name="detail"></param>
+		static void printTime(long elapsedMs)
+		{
+			string strElapsedMs;
+
+			if (elapsedMs > 1000)
+			{
+				strElapsedMs = Convert.ToString(elapsedMs / 1000) + " s";
+			}
+			else
+			{
+				strElapsedMs = Convert.ToString(elapsedMs) + " ms";
+			}
+			printInfo("Finished processing file in: ", strElapsedMs);
+		}
+
 		static void printError(string name, string error, string detail)
 		{
 			Console.ForegroundColor = ConsoleColor.Red;
-			Console.Write("" + error + ": ");
-			Console.ForegroundColor = ConsoleColor.Cyan;
+			Console.Write(error + ": ");
+			Console.ForegroundColor = ConsoleColor.DarkYellow;
 			Console.Write("\'" + name + "\' ");
 			Console.ForegroundColor = ConsoleColor.Red;
 			Console.WriteLine("(" + detail + ")");
 			Console.ForegroundColor = ConsoleColor.White;
 		}
 
+		static void printProgress(string title, string data)
+		{
+			Console.ForegroundColor = ConsoleColor.Green;
+			Console.Write(title);
+			Console.ForegroundColor = ConsoleColor.Cyan;
+			Console.WriteLine(data);
+			Console.ForegroundColor = ConsoleColor.White;
+		}
+
 		static void printInfo(string title, string data)
 		{
-			Console.ForegroundColor = ConsoleColor.Cyan;
+			Console.ForegroundColor = ConsoleColor.Blue;
 			Console.Write(title);
-			Console.ForegroundColor = ConsoleColor.Magenta; 
+			Console.ForegroundColor = ConsoleColor.Yellow;
 			Console.WriteLine(data);
+			Console.ForegroundColor = ConsoleColor.White;
 		}
 
 		static string processLineEncDec(string filename, string line, string strOld, string strNew)
@@ -94,13 +116,15 @@ namespace chgcnf3
                 }
 				if (cryptLine.ToUpper().Contains(strOld.ToUpper()))
 				{
-					printInfo("Replaced '" + strOld + "' with '" + strNew + "' in encrypted file: ", filename);
+					printProgress("Replaced '" + strOld + "' with '" + strNew + "' in encrypted file: ", filename);
 					writeToLog("Replaced '" + strOld + "' with '" + strNew + "' in encrypted file: " + filename);
 
 					// String is found, replace and encrypt string again 
 					cryptLine = cryptLine.Replace(strOld.ToLower(), strNew.ToUpper());
 					cryptLine = cryptLine.Replace(strOld.ToUpper(), strNew.ToUpper());
 					cryptLine = cryptLine.Replace(toCamelCase(strOld), strNew.ToUpper());
+
+					foundCount++;
 					
 					return enc.Encrypt(cryptLine, true);
 				}
@@ -197,7 +221,7 @@ namespace chgcnf3
 			string cryptLine;
 			try
 			{
-				cryptLine = enc.Decrypt(line, true);
+				cryptLine = enc.Decrypt(line, true); 
 				if (cryptLine.Contains("atalog") || cryptLine.Contains("atabase") || cryptLine.Contains("DSN"))
 				{
 					return true;
@@ -224,48 +248,74 @@ namespace chgcnf3
 				return false;
 			}
 
+			if (substring.IndexOf("xml") < 0)
+			{
+				// Not an XML file, get out.
+				return false;
+			}
+			
 			int from = substring.IndexOf("connectionStrings") + "connectionStrings".Length + 1; // skip closing "
 			int to = substring.IndexOf("</connectionStrings");
 			int i1, i2, i3;
 			string line;
 
-			
-			if (from > 0 && to > 0)
+			try
 			{
-				substring = substring.Substring(from, to - from); // these are the connection strings (all)
-				// It is an xml config file with connectionStrings
-				while (true)
+				if (from > 0 && to > 0)
 				{
-					// Find first connectionString in substring 
-					i1 = substring.IndexOf("connectionString");
-					//debug("1: [" + i1.ToString() + "]" + substring);
-					if (i1 < 0) break;
-					i1 += "connectionString".Length + 1; // go past the connectionString=
-														 //debug("2: i1= " + i1.ToString());
-					// found a connectionString, get the limits
-					i2 = substring.IndexOf("\"", i1); // find first "
-													  //debug("3: i2= " + i2.ToString());					 
-					if (i2 < 0) break;
-					i2++; // pass the double comma
-					i3 = substring.IndexOf("/>", i2); // find end of connectionString
-													  //debug("4: i3= " + i3.ToString());
-					if (i3 < 0) break;
-					i3 += 2; // pass the /> bit
-					line = substring.Substring(i2, i3 - i2 - 4); // Minus string beginning and '/>'
-																 //debug("Line: " + line);
-					if (isEncrypted(line))
+					substring = substring.Substring(from, to - from); // these are the connection strings (all)
+					// It is an xml config file with connectionStrings
+					while (true)
 					{
-						return true;
+						// Find first connectionString in substring 
+						i1 = substring.IndexOf("connectionString");
+						//debug("1: [" + i1.ToString() + "]" + substring);
+						if (i1 < 0) break;
+						i1 += "connectionString".Length + 1; // go past the connectionString=
+															 //debug("2: i1= " + i1.ToString());
+						// found a connectionString, get the limits
+						i2 = substring.IndexOf("\"", i1); // find first "
+														  //debug("3: i2= " + i2.ToString());					 
+						if (i2 < 0) break;
+						i2++; // pass the double comma
+						i3 = substring.IndexOf("\"", i2); // find end of connectionString
+														  //debug("4: i3= " + i3.ToString());
+						if (i3 < 0) break;
+						i3 += 2; // pass the last " bit
+						line = substring.Substring(i2, i3 - i2 - 2); // Minus string beginning and '"'
+																	 //debug("Line: " + line);
+						if (isEncrypted(line))
+						{
+							return true;
+						}
+						if (i2 > i3) break;
+						substring = substring.Substring(i3 - i2); // get from after last '"'
 					}
-					if (i2 > i3) break;
-					substring = substring.Substring(i3 - i2); // get from after last '/>'
 				}
+			}
+			catch (Exception ex)
+            {
+				printError(path, "Error searching file for encrypted data", ex.Message);
+				return false;
 			}
 			return false;
 		}
 
 		static void createUndoHeader(string path)
 		{
+			if (uniqueFileName.Length <= 0)
+			{
+				uniqueFileName = DateTime.Now.ToString("yyyyMMdd_HHmmssffff");
+			}
+			if (undoFile.Length <= 0)
+            {
+				undoFile = "chgcnf_undo_" + uniqueFileName + ".bat";
+			}		
+
+			//static string uniqueFileName = "";
+			//static string undoFile = "chgcnf_undo.bat";
+			//static string logFileName = "chgcnf.log";
+			 
 			string undoText = "ECHO Restoring " + path + Environment.NewLine;
 			undoText += "@ECHO OFF" + Environment.NewLine;
 			undoText += "ECHO Restoring last batch of changes" + Environment.NewLine;
@@ -293,7 +343,7 @@ namespace chgcnf3
 			{
 				File.AppendAllText(undoFile, undoText);
 				// writeToLog("Created undo file: " + undoFile);
-				// printInfo("Created undo file: ", undoFile);
+				// printProgress("Created undo file: ", undoFile);
 			}
 			catch (Exception ex)
 			{
@@ -302,7 +352,8 @@ namespace chgcnf3
 			}
 		}
 
-		static string createBackup(string path) {
+		static string createBackup(string path) 
+		{
 			string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
 			string backupFile = path + "_" + timestamp;
 
@@ -310,7 +361,7 @@ namespace chgcnf3
 			{
 				System.IO.File.Move(path, backupFile);
 				// writeToLog("Created backup file: " + backupFile);
-				// printInfo("Created backup file: ", backupFile);
+				// printProgress("Created backup file: ", backupFile);
 			}
 			catch (Exception ex)
 			{
@@ -328,10 +379,18 @@ namespace chgcnf3
 		}
 
 		public static string toCamelCase(string input)
-		{  
-			if (String.IsNullOrEmpty(input))
-				throw new ArgumentException("ARGH!");
-			return input.First().ToString().ToUpper() + input.Substring(1).ToLower();
+		{
+			string strCamelCase;
+			try
+            {
+				strCamelCase = input.First().ToString().ToUpper() + input.Substring(1).ToLower();
+			}
+			catch (Exception ex)
+            {
+				printError(input, "Error processing string", ex.Message);
+				return input;
+            }
+			return strCamelCase;
 		}
 
 
@@ -373,6 +432,8 @@ namespace chgcnf3
 			string backupFile = "";
 			 
 			if (fileContainsString(file.FullName, strFind)) {
+				foundCount++;
+
 				backupFile = createBackup(file.FullName);
 				if (backupFile is null) {
 					printError(file.FullName, "Error creating backup file", "Execution halted");
@@ -381,13 +442,15 @@ namespace chgcnf3
 				replaceFileContents(file.FullName, backupFile, strFind, strReplace);
 				createUndo(file.FullName, backupFile);
 
-				printInfo("Replaced '" + strFind + "' with '" + strReplace + "' in text file: ", file.FullName);
+				printProgress("Replaced '" + strFind + "' with '" + strReplace + "' in text file: ", file.FullName);
 				writeToLog("Replaced '" + strFind + "' with '" + strReplace + "' in text file: " + file.FullName); 
 			} 
 			else
 			{
 				if (FileContainsStringUTF16(file.FullName, strFind))
 				{
+					foundCount++;
+
 					backupFile = createBackup(file.FullName);
 					if (backupFile is null)
 					{
@@ -397,13 +460,13 @@ namespace chgcnf3
 					replaceFileContentsUTF16(file.FullName, backupFile, strFind, strReplace);
 					createUndo(file.FullName, backupFile);
 
-					printInfo("Replaced '" + strFind + "' with '" + strReplace + "' in UTF16 file: ", file.FullName);
+					printProgress("Replaced '" + strFind + "' with '" + strReplace + "' in UTF16 file: ", file.FullName);
 					writeToLog("Replaced '" + strFind + "' with '" + strReplace + "' in UTF16 file: " + file.FullName);
 				}
 				else
 				{
 					if (fileHasEncriptedConnectionString(file.FullName))
-					{
+					{ 
 						backupFile = createBackup(file.FullName);
 						if (backupFile is null)
 						{
@@ -414,7 +477,7 @@ namespace chgcnf3
 						createUndo(file.FullName, backupFile);
 
 						// writeToLog("Encrypted connectionString found in: " + file.FullName);
-						// printInfo("Processed encrypted file: ", file.FullName);
+						// printProgress("Processed encrypted file: ", file.FullName);
 					}
 					/*
 					else
@@ -457,6 +520,15 @@ namespace chgcnf3
 
 		static void writeToLog(string logMessage)
 		{
+			if (uniqueFileName.Length <= 0)
+			{
+				uniqueFileName = DateTime.Now.ToString("yyyyMMdd_HHmmssffff");
+			}
+			if (logFileName.Length <= 0)
+			{
+				logFileName = "chgcnf_" + uniqueFileName + ".log";
+			}
+
 			try
 			{
 				// Console.WriteLine(logMessage);
@@ -478,7 +550,7 @@ namespace chgcnf3
 			Console.ForegroundColor = ConsoleColor.White;
 			Console.Write("Usage: ");
 			Console.ForegroundColor = ConsoleColor.Green;
-			Console.Write("chgcnf3.exe");
+			Console.Write("chgcnf.exe");
 			Console.ForegroundColor = ConsoleColor.White;
 			Console.Write(" <");
 			Console.ForegroundColor = ConsoleColor.DarkGray;
@@ -522,41 +594,25 @@ namespace chgcnf3
 				strFind = args[1];
 				strReplace = args[2];
 
-				writeToLog("Replacing '" + strFind + "' for '" + strReplace.ToUpper() + "' in config files (.config and .udl) in '" + path + "'.");
-				Console.ForegroundColor = ConsoleColor.Green; Console.Write("Replacing '");
-				Console.ForegroundColor = ConsoleColor.Cyan;  Console.Write(strFind);
-				Console.ForegroundColor = ConsoleColor.Green; Console.Write("' for '");
-				Console.ForegroundColor = ConsoleColor.Cyan;  Console.Write(strReplace.ToUpper()); 
-				Console.ForegroundColor = ConsoleColor.Green; Console.Write("' in config files (.config and .udl) in '");
-				Console.ForegroundColor = ConsoleColor.Cyan;  Console.Write(path);
-				Console.ForegroundColor = ConsoleColor.Green; Console.WriteLine("'.");
-				Console.ForegroundColor = ConsoleColor.White;
-
+				printInfo("Execution: ", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss.ffff"));
+				printInfo("Searching directory: ", "'" + path + "'");
+				printInfo("Replacing strings: ", "'" + strFind + "' for '" + strReplace.ToUpper() + "'");
 
 				if (Directory.Exists(path))
 				{
 					createUndoHeader(path);
 					writeLogHeader();
+					writeToLog("Replacing strings '" + strFind + "' for '" + strReplace.ToUpper() + "' in config files (.config and .udl) in '" + path + "'.");
 
 					var watch = System.Diagnostics.Stopwatch.StartNew();
 
 					EnumerateFiles(path);
+					
+					printInfo("Found '" + strFind + "': ", foundCount.ToString() + " times.");
 
 					watch.Stop();
 					var elapsedMs = watch.ElapsedMilliseconds;
-					Console.ForegroundColor = ConsoleColor.Green;
-					Console.Write("Finished processing file in ");
-					Console.ForegroundColor = ConsoleColor.Yellow;
-					if (elapsedMs > 1000)
-					{
-						Console.Write(Convert.ToString(elapsedMs/1000) + " s");
-					}
-					else {
-						Console.Write(Convert.ToString(elapsedMs) + " ms");
-					}
-					Console.ForegroundColor = ConsoleColor.Green;
-					Console.WriteLine(".");
-					Console.ForegroundColor = ConsoleColor.White;
+					printTime(elapsedMs);
 				}
 				else
 				{
