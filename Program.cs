@@ -14,6 +14,7 @@ namespace chgcnf
 		static readonly int versionRevision = 0;
 		static string strFind = "";
 		static string strReplace = "";
+		private static long numSearched = 0;
 
 		static string uniqueFileName = "";	// Built on first run
 		static string undoFile = "";		// Built on first run
@@ -463,6 +464,7 @@ namespace chgcnf
 				{
 					if (file.Extension.ToUpper().Equals(".CONFIG") || file.Extension.ToUpper().Equals(".UDL"))
 					{
+						numSearched++;
 						// writeToLog("Processing file: " + file.FullName);
 						ProcessFile(file);
 					}
@@ -601,6 +603,7 @@ namespace chgcnf
 						PrintInfo("Found '" + strFind + "': ", foundCount.ToString() + " times.");
 					}
 
+					PrintInfo("Number of config files searched: ", numSearched.ToString());
 					watch.Stop();
 					var elapsedMs = watch.ElapsedMilliseconds;
 					PrintTime(elapsedMs);
